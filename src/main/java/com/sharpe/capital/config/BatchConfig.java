@@ -14,6 +14,10 @@ import com.sharpe.capital.task.UpdateFxRates;
 @EnableBatchProcessing
 public class BatchConfig {
 
+	private static final String UPDATE_FX_RATES_JOB = "updateFxRatesJob";
+
+	private static final String STEP_1 = "step1";
+
 	@Autowired
 	public JobBuilderFactory jobBuilderFactory;
 
@@ -22,7 +26,7 @@ public class BatchConfig {
 
 	@Bean
 	public Job updateFxRatesJob() {
-		return jobBuilderFactory.get("updateFxRatesJob")
-				.flow(stepBuilderFactory.get("step1").tasklet(new UpdateFxRates()).build()).end().build();
+		return jobBuilderFactory.get(UPDATE_FX_RATES_JOB)
+				.flow(stepBuilderFactory.get(STEP_1).tasklet(new UpdateFxRates()).build()).end().build();
 	}
 }
