@@ -32,6 +32,11 @@ public class UpdateFxRates {
 
 	private static final ExecutorService executor = Executors.newFixedThreadPool(10);
 
+	/**
+	 * This methods executes every 250ms and utilizes the TrueFxFetcher class to
+	 * retrieve real-time FX quotes and persist them to Cassandra using the
+	 * FxTickRepository
+	 */
 	@Scheduled(fixedRate = 250)
 	public void saveTicks() {
 
