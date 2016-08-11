@@ -1,33 +1,59 @@
 package com.sharpe.capital.task;
 
-import org.springframework.batch.core.StepContribution;
-import org.springframework.batch.core.scope.context.ChunkContext;
-import org.springframework.batch.core.step.tasklet.Tasklet;
-import org.springframework.batch.repeat.RepeatStatus;
+import java.math.BigDecimal;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import com.sharpe.capital.data.access.api.model.cassandra.FxTick;
+import com.sharpe.capital.data.access.api.repository.FxTickRepository;
 import com.sharpe.capital.fetcher.RateFetcher;
 import com.sharpe.capital.fetcher.TrueFxFetcher;
 import com.sharpe.capital.model.FxRate;
 
-import lombok.extern.slf4j.Slf4j;
+import scala.collection.JavaConversions;
+import scala.collection.mutable.Buffer;
 
-@Slf4j
-public class UpdateFxRates implements Tasklet {
+/**
+ * This task utilizes the **fx-rate-importer** project and **data-access-api**
+ * project to fetch real-time currency rates from True FX and persist them in
+ * the platforms NoSQL Cassandra data store. The method saveTicks executes every
+ * 250ms, and persists each tick on its own thread to minimize latency and
+ * improve write speeds.
+ */
+@Component
+public class UpdateFxRates {
 
 	private static final RateFetcher fetcher = new TrueFxFetcher();
 
-	@Override
-	public RepeatStatus execute(StepContribution stepConfig, ChunkContext chunkContext) throws Exception {
+	private static final FxTickRepository fxTickRepository = FxTickRepository.getInstance();
 
-		FxRate rate = fetcher.getRateBySymbol("AUD/USD");
+	private static final ExecutorService executor = Executors.newFixedThreadPool(10);
 
-		log.info("Symbol: " + rate.symbol());
-		log.info("Date: " + rate.date());
-		log.info("Ask: " + rate.ask());
-		log.info("Bid: " + rate.bid());
+	@Scheduled(fixedRate = 250)
+	public void saveTicks() {
 
-		return RepeatStatus.FINISHED;
+		String[] currencyCodes = { "EUR/USD", "GBP/USD", "AUD/USD", "USD/JPY", "USD/CAD" };
 
+		Buffer<FxRate> rates = fetcher.getRatesBySymbols(currencyCodes);
+
+		JavaConversions.bufferAsJavaList(rates).stream().forEach(rate -> this.saveRate(rate));
+
+	}
+
+	/**
+	 * Saves an FxRate object in Cassandra on a new Thread
+	 * 
+	 * @param rate
+	 *            the FxRate object
+	 */
+	private void saveRate(FxRate rate) {
+		executor.execute(() -> {
+			fxTickRepository.save(new FxTick(rate.symbol(), rate.date(), BigDecimal.valueOf(rate.ask().doubleValue()),
+					BigDecimal.valueOf(rate.bid().doubleValue())));
+		});
 	}
 
 }
